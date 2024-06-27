@@ -1,4 +1,4 @@
-package transfer_recs
+package main
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func TransferRecs() {
+func TransferRecords() {
 	// Load environment variables from .env file
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -68,8 +68,8 @@ func TransferRecs() {
 	destColl := destClient.Database("ts").Collection("temphums")
 
 	// Define the date range for the year 2023
-	startDate := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
-	endDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	startDate := time.Date(2020, 5, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2020, 9, 1, 0, 0, 0, 0, time.UTC)
 
 	// Find records in the year 2023
 	filter := bson.D{
@@ -82,23 +82,32 @@ func TransferRecs() {
 	defer cursor.Close(ctx)
 
 	// Prepare the records to be inserted into the destination collection
-	var records []interface{}
+	var records []mongo.WriteModel
 	for cursor.Next(ctx) {
 		var record bson.M
 		if err := cursor.Decode(&record); err != nil {
 			log.Fatal(err)
 		}
-		records = append(records, record)
+		updateModel := mongo.NewUpdateOneModel().
+			SetFilter(bson.D{{"_id", record["_id"]}}).
+			SetUpdate(bson.D{{"$set", record}}).
+			SetUpsert(true)
+		records = append(records, updateModel)
 	}
 
-	// Insert records into the destination collection
+	// Perform the bulk write operation with upsert
 	if len(records) > 0 {
-		_, err = destColl.InsertMany(ctx, records)
+		bulkWriteOptions := options.BulkWrite().SetOrdered(false)
+		_, err = destColl.BulkWrite(ctx, records, bulkWriteOptions)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Successfully transferred %d records from 2023", len(records))
+		log.Printf("Successfully transferred %d records from 2024", len(records))
 	} else {
-		log.Println("No records found for the year 2023")
+		log.Println("No records found for the year 2021")
 	}
+}
+
+func main() {
+	TransferRecords()
 }
