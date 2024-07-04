@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
@@ -97,7 +98,25 @@ func main() {
 	}
 	defer cursor.Close(ctx)
 
-	// Iterate through the cursor and print the results
+	// Create the CSV file
+	csvFileName := fmt.Sprintf("measurements_%s.csv", now.Format("2006-01-02"))
+	file, err := os.Create(csvFileName)
+	if err != nil {
+		log.Fatalf("Failed to create CSV file: %v", err)
+	}
+	defer file.Close()
+
+	// Create a CSV writer
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// Write the header to the CSV file
+	header := []string{"measurement_date_time", "temperature_F", "humidity_percent"}
+	if err := writer.Write(header); err != nil {
+		log.Fatalf("Failed to write header to CSV file: %v", err)
+	}
+
+	// Iterate through the cursor and write the results to the CSV file
 	for cursor.Next(ctx) {
 		var result struct {
 			ID             string  `bson:"_id"`
@@ -107,11 +126,24 @@ func main() {
 		if err := cursor.Decode(&result); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("Hour: %s, Avg Humidity: %.2f, Avg Temperature: %.2f\n", result.ID, result.AvgHumidity, result.AvgTemperature)
+
+		// Format the record
+		record := []string{
+			result.ID,
+			fmt.Sprintf("%.2f", result.AvgTemperature),
+			fmt.Sprintf("%.2f", result.AvgHumidity),
+		}
+
+		// Write the record to the CSV file
+		if err := writer.Write(record); err != nil {
+			log.Fatalf("Failed to write record to CSV file: %v", err)
+		}
 	}
 
 	// Check for any errors encountered during iteration
 	if err := cursor.Err(); err != nil {
 		log.Fatal(err)
 	}
+
+	fmt.Printf("Data successfully written to %s\n", csvFileName)
 }
